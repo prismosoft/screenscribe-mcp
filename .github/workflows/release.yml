@@ -1,0 +1,38 @@
+name: Release
+
+# Publishes screenscribe-mcp to PyPI when a version tag (v*) is pushed.
+# Uses PyPI Trusted Publishing (OIDC) — no API token stored as a secret.
+# One-time setup on PyPI: add this repo + the "publish" job below as a trusted
+# publisher for the screenscribe-mcp project (Project → Settings → Publishing).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e .
+      - run: python -m pip install pytest
+      - run: python -m pytest -q
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for OIDC trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install build
+      - run: python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1

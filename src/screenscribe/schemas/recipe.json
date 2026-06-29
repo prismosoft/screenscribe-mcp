@@ -2,7 +2,8 @@
   "type": "object",
   "description": "A complete cooking recipe extracted from a cooking-tutorial video, including ingredients with quantities, the ordered cooking process, and tips.",
   "properties": {
-    "dish": { "type": "string", "description": "Name of the dish (transliterate if the video is not in English)" },
+    "dish": { "type": "string", "description": "Name of the dish (transliterate to the Latin alphabet if the video is not in English)" },
+    "title_bn": { "type": "string", "description": "The dish name in its original script (e.g. Bengali / Devanagari), exactly as spoken or shown on screen, if the video is not in English" },
     "servings": { "type": "string", "description": "How many it serves, or what it is served with, if stated" },
     "ingredients": {
       "type": "array",
@@ -34,8 +35,24 @@
     },
     "tips": {
       "type": "array",
-      "description": "Techniques or tips the cook gives for a better result.",
-      "items": { "type": "string" }
+      "description": "Techniques or tips the cook gives for a better result. For EACH tip, record the timestamp (seconds) in the video where the advice is spoken/shown, or where the action it refers to happens — so it can be attached to the right step.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string", "description": "The tip" },
+          "seconds": { "type": "number", "description": "Timestamp in seconds where the tip is given, or where the action it refers to happens" }
+        },
+        "required": ["text"]
+      }
+    },
+    "hero_shot": {
+      "type": "object",
+      "description": "The single most visually appealing moment to screenshot as a recipe-card hero image — ideally the finished, fully plated dish, well-lit and complete. IMPORTANT: pick a CLEAN frame with the food unobstructed; avoid any moment showing end-screen / 'subscribe' / 'thanks for watching' / channel-logo / text overlays (these usually appear in the closing seconds), and avoid frames with hands, utensils, or motion blur across the dish.",
+      "properties": {
+        "seconds": { "type": "number", "description": "Timestamp in seconds of that best frame" },
+        "reason": { "type": "string", "description": "What is shown and why it is the best hero frame" }
+      },
+      "required": ["seconds"]
     }
   },
   "required": ["dish", "ingredients", "steps"]

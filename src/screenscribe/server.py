@@ -55,7 +55,7 @@ from screenscribe.config import (
     SLIDE_SELECTION_MAX,
     SLIDE_SELECTION_MIN_INTERVAL,
 )
-from screenscribe.downloader import download_video, fetch_transcript
+from screenscribe.downloader import download_video, fetch_transcript, fetch_transcript_safe
 from screenscribe.frame_extractor import extract_frames_at_timestamps
 from screenscribe.session import (
     frames_dir as session_frames_dir,
@@ -232,7 +232,7 @@ def extract_frames(
         if transcript_file.exists():
             transcript = json.loads(transcript_file.read_text())
         else:
-            transcript = fetch_transcript(video_id, s_dir)
+            transcript = fetch_transcript_safe(video_id, s_dir)
 
         video_duration = (
             transcript[-1]["start"] + transcript[-1].get("duration", 0) if transcript else 0.0

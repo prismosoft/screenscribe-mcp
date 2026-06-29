@@ -44,6 +44,27 @@ def test_load_preset_known_and_unknown():
     assert load_preset("nope") is None
 
 
+def test_recipe_preset_exposes_hero_shot_seconds():
+    # The recipe preset asks Gemini for the best frame to screenshot for a recipe
+    # card (a hero image for the website), as a numeric timestamp.
+    hero = load_preset("recipe")["properties"]["hero_shot"]
+    assert hero["properties"]["seconds"]["type"] == "number"
+
+
+def test_recipe_preset_captures_native_title():
+    # The dish name in its original script (e.g. Bengali) for the website cards.
+    assert load_preset("recipe")["properties"]["title_bn"]["type"] == "string"
+
+
+def test_recipe_preset_tips_carry_a_timestamp():
+    # Each tip records the second it is given, so a downstream exporter can attach
+    # it to the recipe step in progress at that moment.
+    items = load_preset("recipe")["properties"]["tips"]["items"]
+    assert items["type"] == "object"
+    assert "text" in items["properties"]
+    assert items["properties"]["seconds"]["type"] == "number"
+
+
 def test_resolve_schema_dict_passthrough():
     s = {"type": "object"}
     assert resolve_schema(s) is s

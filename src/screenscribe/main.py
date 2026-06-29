@@ -40,7 +40,7 @@ from screenscribe.config import (
     SLIDE_SELECTION_MAX,
     SLIDE_SELECTION_MIN_INTERVAL,
 )
-from screenscribe.downloader import download_video, fetch_transcript
+from screenscribe.downloader import download_video, fetch_transcript, fetch_transcript_safe
 from screenscribe.frame_extractor import extract_frames_at_timestamps
 from screenscribe.gemini_selector import gemini_available, select_frames, select_slides
 from screenscribe.session import (
@@ -131,7 +131,7 @@ def cmd_extract(args):
     print("[1/3] Downloading video and transcript...")
     title = get_video_title(args.url)
     video_path, _, _ = download_video(args.url, s_dir)
-    transcript = fetch_transcript(video_id, s_dir)
+    transcript = fetch_transcript_safe(video_id, s_dir)
     video_duration = _video_duration(transcript)
 
     print("\n[2/3] Identifying key visual moments...")
@@ -222,7 +222,7 @@ def cmd_slides(args):
         transcript = json.loads(transcript_file.read_text())
         print(f"  Transcript found: {len(transcript)} segments")
     else:
-        transcript = fetch_transcript(video_id, s_dir)
+        transcript = fetch_transcript_safe(video_id, s_dir)
 
     print("\n[2/3] Identifying slide-worthy moments...")
     selections = select_slides(

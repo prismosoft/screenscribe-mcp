@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import yt_dlp
@@ -7,6 +8,21 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from screenscribe.ffmpeg_paths import ffmpeg_dir
 
 _ytt = YouTubeTranscriptApi()
+
+
+def _cookie_opts() -> dict:
+    """yt-dlp cookie options from the environment, to authenticate downloads when
+    YouTube challenges with 'Sign in to confirm you're not a bot'. Set ONE of:
+      YTDLP_COOKIES_FROM_BROWSER=safari|firefox|chrome|...   (read browser cookies)
+      YTDLP_COOKIES_FILE=/path/cookies.txt                   (Netscape cookies file)
+    Returns {} when neither is set."""
+    browser = os.environ.get("YTDLP_COOKIES_FROM_BROWSER")
+    if browser:
+        return {"cookiesfrombrowser": (browser,)}
+    cookie_file = os.environ.get("YTDLP_COOKIES_FILE")
+    if cookie_file:
+        return {"cookiefile": cookie_file}
+    return {}
 
 
 def download_video(url: str, output_dir: Path) -> tuple[Path, str, list[dict]]:
@@ -25,6 +41,8 @@ def download_video(url: str, output_dir: Path) -> tuple[Path, str, list[dict]]:
     ff_dir = ffmpeg_dir()
     if ff_dir:
         ydl_opts["ffmpeg_location"] = ff_dir
+
+    ydl_opts.update(_cookie_opts())   # authenticate if cookies are configured
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -58,3 +76,15 @@ def fetch_transcript(video_id: str, output_dir: Path) -> list[dict]:
 
     print(f"  Transcript saved: {len(transcript)} segments → {transcript_path}")
     return transcript
+
+
+def fetch_transcript_safe(video_id: str, output_dir: Path) -> list[dict]:
+    """fetch_transcript, but non-fatal: returns [] (with a warning) when no
+    transcript is available — e.g. a non-English video with no English captions.
+    Use this where the transcript is optional context (frame extraction watches
+    the video directly), so a missing transcript must not abort the command."""
+    try:
+        return fetch_transcript(video_id, output_dir)
+    except Exception as e:
+        print(f"  Warning: no transcript fetched ({e.__class__.__name__}); continuing without it.")
+        return []
