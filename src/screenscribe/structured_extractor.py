@@ -14,7 +14,7 @@ from pathlib import Path
 import jsonschema
 
 from screenscribe.config import GEMINI_MEDIA_RESOLUTION_LOW, GEMINI_MODEL
-from screenscribe.resolver import parse_video_id as _video_id
+from screenscribe.local_source import source_video_id as _video_id
 from screenscribe.session import session_dir
 from screenscribe.transcript_selector import _parse_time_range
 

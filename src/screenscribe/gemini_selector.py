@@ -17,6 +17,7 @@ import json
 import os
 import time
 
+from screenscribe.local_source import resolve_local_path
 from screenscribe.transcript_selector import (
     _parse_time_range,
     _parse_timestamp,
@@ -26,6 +27,39 @@ from screenscribe.transcript_selector import (
 
 MAX_RETRIES = 3
 INITIAL_BACKOFF = 2.0
+
+# Files API: how long to wait for an uploaded local video to finish processing.
+UPLOAD_POLL_INTERVAL = 2.0
+UPLOAD_TIMEOUT = 300.0
+
+# Uploaded local files, cached by absolute path for this process so retries and
+# repeat calls in one run don't re-upload the same (possibly large) video.
+_UPLOADED: dict[str, object] = {}
+
+
+def _file_state(f) -> str:
+    """The processing state name of a Files API file ('PROCESSING'|'ACTIVE'|'FAILED')."""
+    state = getattr(f, "state", None)
+    return getattr(state, "name", state)
+
+
+def _upload_local_video(client, path):
+    """Upload a local video via the Gemini Files API and block until it is ACTIVE.
+    Returns the File. Raises RuntimeError if processing fails or times out."""
+    f = client.files.upload(file=path)
+    waited = 0.0
+    while _file_state(f) == "PROCESSING":
+        if waited >= UPLOAD_TIMEOUT:
+            raise RuntimeError(
+                f"Gemini did not finish processing '{path}' within {UPLOAD_TIMEOUT:.0f}s."
+            )
+        time.sleep(UPLOAD_POLL_INTERVAL)
+        waited += UPLOAD_POLL_INTERVAL
+        f = client.files.get(name=f.name)
+    state = _file_state(f)
+    if state != "ACTIVE":
+        raise RuntimeError(f"Gemini failed to process '{path}' (state={state}).")
+    return f
 
 
 def gemini_available() -> bool:
@@ -110,8 +144,18 @@ def _call_gemini(youtube_url, model, prompt, parsed_range, media_resolution_low,
             end_offset=f"{int(parsed_range[1])}s",
         )
 
+    local_path = resolve_local_path(youtube_url)
+    if local_path:
+        uploaded = _UPLOADED.get(local_path)
+        if uploaded is None:
+            uploaded = _upload_local_video(client, local_path)
+            _UPLOADED[local_path] = uploaded
+        file_data = types.FileData(file_uri=uploaded.uri, mime_type=uploaded.mime_type)
+    else:
+        file_data = types.FileData(file_uri=youtube_url)
+
     part = types.Part(
-        file_data=types.FileData(file_uri=youtube_url),
+        file_data=file_data,
         video_metadata=video_metadata,
     )
     media_resolution = (

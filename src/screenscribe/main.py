@@ -25,6 +25,7 @@ Examples:
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -55,7 +56,7 @@ from screenscribe.session import (
 )
 
 
-from screenscribe.resolver import parse_video_id as extract_video_id
+from screenscribe.local_source import resolve_local_path, source_video_id
 
 
 def get_video_title(url: str) -> str:
@@ -87,10 +88,15 @@ def _video_duration(transcript: list[dict]) -> float:
 # ── extract ───────────────────────────────────────────────────────────────────
 
 def cmd_extract(args):
-    video_id = extract_video_id(args.url)
+    local_path = resolve_local_path(args.url)
+    video_id = source_video_id(args.url)
     s_dir = session_dir(video_id)
     f_dir = session_frames_dir(video_id)
     transcript_only = args.transcript_only
+
+    if local_path and transcript_only:
+        print("ERROR: --transcript-only needs a YouTube URL; a local file has no captions.")
+        sys.exit(1)
 
     print(f"\n{'=' * 44}")
     print(f"  screenscribe extract")
@@ -128,10 +134,17 @@ def cmd_extract(args):
     # ── Frame extraction (Gemini-selected) ────────────────────────────────
     _require_gemini_for_frames(args.timestamps)
 
-    print("[1/3] Downloading video and transcript...")
-    title = get_video_title(args.url)
-    video_path, _, _ = download_video(args.url, s_dir)
-    transcript = fetch_transcript_safe(video_id, s_dir)
+    if local_path:
+        print("[1/3] Using local video file (no download, no transcript)...")
+        title = Path(local_path).name
+        video_path = Path(local_path)
+        transcript = []
+        print(f"  Local file: {video_path}")
+    else:
+        print("[1/3] Downloading video and transcript...")
+        title = get_video_title(args.url)
+        video_path, _, _ = download_video(args.url, s_dir)
+        transcript = fetch_transcript_safe(video_id, s_dir)
     video_duration = _video_duration(transcript)
 
     print("\n[2/3] Identifying key visual moments...")
@@ -175,7 +188,8 @@ def cmd_extract(args):
 # ── slides ────────────────────────────────────────────────────────────────────
 
 def cmd_slides(args):
-    video_id = extract_video_id(args.url)
+    local_path = resolve_local_path(args.url)
+    video_id = source_video_id(args.url)
     s_dir = session_dir(video_id)
     sl_dir = session_slides_dir(video_id)
     has_custom_params = bool(args.focus or args.time_range or args.timestamps)
@@ -206,23 +220,29 @@ def cmd_slides(args):
     _require_gemini_for_frames(args.timestamps)
 
     print("[1/3] Ensuring video and transcript...")
-    video_path = None
-    if s_dir.exists():
-        candidates = [f for f in s_dir.iterdir()
-                      if f.suffix in ('.mp4', '.mkv', '.webm') and f.stem != 'thumbnail']
-        if candidates:
-            video_path = candidates[0]
-            print(f"  Video found: {video_path.name}")
-    title = get_video_title(args.url)
-    if video_path is None:
-        video_path, _, _ = download_video(args.url, s_dir)
-
-    transcript_file = s_dir / "transcript.json"
-    if transcript_file.exists():
-        transcript = json.loads(transcript_file.read_text())
-        print(f"  Transcript found: {len(transcript)} segments")
+    if local_path:
+        video_path = Path(local_path)
+        title = video_path.name
+        transcript = []
+        print(f"  Local file: {video_path}")
     else:
-        transcript = fetch_transcript_safe(video_id, s_dir)
+        video_path = None
+        if s_dir.exists():
+            candidates = [f for f in s_dir.iterdir()
+                          if f.suffix in ('.mp4', '.mkv', '.webm') and f.stem != 'thumbnail']
+            if candidates:
+                video_path = candidates[0]
+                print(f"  Video found: {video_path.name}")
+        title = get_video_title(args.url)
+        if video_path is None:
+            video_path, _, _ = download_video(args.url, s_dir)
+
+        transcript_file = s_dir / "transcript.json"
+        if transcript_file.exists():
+            transcript = json.loads(transcript_file.read_text())
+            print(f"  Transcript found: {len(transcript)} segments")
+        else:
+            transcript = fetch_transcript_safe(video_id, s_dir)
 
     print("\n[2/3] Identifying slide-worthy moments...")
     selections = select_slides(
@@ -267,7 +287,8 @@ def cmd_analyze(args):
         print("ERROR: `analyze` needs GEMINI_API_KEY — Gemini watches the whole video.")
         sys.exit(1)
 
-    video_id = extract_video_id(args.url)
+    local_path = resolve_local_path(args.url)
+    video_id = source_video_id(args.url)
     s_dir = session_dir(video_id)
 
     if load_analysis(video_id) is not None and not args.force:
@@ -285,12 +306,16 @@ def cmd_analyze(args):
     # create a session only if one doesn't already exist (don't clobber frames).
     s_dir.mkdir(parents=True, exist_ok=True)
     if not session_exists(video_id):
-        try:
-            transcript = fetch_transcript(video_id, s_dir)
-        except Exception:
-            transcript = []
+        if local_path:
+            transcript, title = [], Path(local_path).name
+        else:
+            try:
+                transcript = fetch_transcript(video_id, s_dir)
+            except Exception:
+                transcript = []
+            title = get_video_title(args.url)
         save_session(
-            video_id=video_id, url=args.url, title=get_video_title(args.url),
+            video_id=video_id, url=args.url, title=title,
             duration=_video_duration(transcript), transcript=transcript, frames=[],
         )
 
@@ -401,7 +426,7 @@ def main():
 
     # extract
     p_extract = sub.add_parser("extract", help="Download a video and extract key frames (run once)")
-    p_extract.add_argument("url", help="YouTube URL")
+    p_extract.add_argument("url", help="YouTube URL or a local video file path")
     p_extract.add_argument("--max-frames", type=int, default=FRAME_SELECTION_MAX,
                            help=f"Max frames Gemini selects (default {FRAME_SELECTION_MAX})")
     p_extract.add_argument("--transcript-only", action="store_true",
@@ -417,7 +442,7 @@ def main():
 
     # slides
     p_slides = sub.add_parser("slides", help="Extract presentation slides from a video")
-    p_slides.add_argument("url", help="YouTube URL")
+    p_slides.add_argument("url", help="YouTube URL or a local video file path")
     p_slides.add_argument("--max-slides", type=int, default=SLIDE_SELECTION_MAX,
                           help=f"Max slides to extract (default {SLIDE_SELECTION_MAX})")
     p_slides.add_argument("--force", action="store_true",
@@ -432,7 +457,7 @@ def main():
     # analyze
     p_analyze = sub.add_parser("analyze",
                                help="Gemini watches the whole video → structured analysis (cheap, no frames)")
-    p_analyze.add_argument("url", help="YouTube URL")
+    p_analyze.add_argument("url", help="YouTube URL or a local video file path")
     p_analyze.add_argument("--focus", type=str, default="",
                            help="Focus the analysis on a specific subject")
     p_analyze.add_argument("--time-range", type=str, default="",
@@ -443,7 +468,7 @@ def main():
     # extract-structured
     p_struct = sub.add_parser("extract-structured",
                               help="Extract typed JSON from a video against a schema/preset")
-    p_struct.add_argument("url", help="YouTube URL")
+    p_struct.add_argument("url", help="YouTube URL or a local video file path")
     p_struct.add_argument("--schema", required=True,
                           help="Preset name, path to a .json schema, or inline JSON schema. "
                                "Presets: cli_commands, final_config, step_sequence, "

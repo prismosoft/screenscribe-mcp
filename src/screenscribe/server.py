@@ -33,9 +33,12 @@ Claude Code usage:
     }
   (The key is also read from the shell environment / a .env in the working dir.)
 
-Then in your client, just mention a YouTube URL — the agent will call
-extract_frames / analyze_video as needed, then use get_session to answer
-questions with full repo context.
+Then in your client, just mention a YouTube URL — or a local video file (a path
+like /videos/clip.mp4 or a file:// URI) — and the agent will call extract_frames
+/ analyze_video as needed, then use get_session to answer questions with full
+repo context. For analyze_video, extract_frames, and extract_structured, `url`
+accepts either; Gemini uploads a local file and watches it the same way (local
+files have no transcript). extract_transcript is YouTube-only.
 """
 
 import json
@@ -72,11 +75,16 @@ from screenscribe.session import (
 mcp = FastMCP("screenscribe")
 
 
+from screenscribe.local_source import resolve_local_path, source_video_id
 from screenscribe.resolver import parse_video_id as _extract_video_id
 
 
 def _get_title(url: str) -> str:
-    """Fetch video title without downloading."""
+    """Fetch video title without downloading. A local file uses its filename."""
+    from pathlib import Path
+    local = resolve_local_path(url)
+    if local:
+        return Path(local).name
     try:
         import yt_dlp
         with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
@@ -155,9 +163,13 @@ def extract_frames(
     timestamps: str = "",
 ) -> str:
     """
-    Extract frames from a YouTube video as PNG images you (the agent) can open and
-    read directly. Gemini watches the video to pick the moments; ffmpeg extracts
-    them. There is no server-side description step — you view the images yourself.
+    Extract frames from a video as PNG images you (the agent) can open and read
+    directly. Gemini watches the video to pick the moments; ffmpeg extracts them.
+    There is no server-side description step — you view the images yourself.
+
+    `url` may be a YouTube URL or a local video file (a path like
+    /videos/clip.mp4 or a file:// URI). Local files are uploaded to Gemini
+    directly; they have no transcript.
 
     Use this when the user needs the actual visuals (what's on screen: code,
     diagrams, UI, demonstrations, scenes). For text-only questions,
@@ -192,9 +204,10 @@ def extract_frames(
         })
 
     try:
-        video_id = _extract_video_id(url)
+        video_id = source_video_id(url)
     except ValueError as e:
         return json.dumps({"status": "error", "message": str(e)})
+    local_path = resolve_local_path(url)
 
     s_dir = session_dir(video_id)
     out_dir = session_slides_dir(video_id) if style == "slides" else session_frames_dir(video_id)
@@ -218,21 +231,27 @@ def extract_frames(
             })
 
     try:
-        # Reuse a previously downloaded video if present, else download.
-        video_path = None
-        if s_dir.exists():
-            candidates = [f for f in s_dir.iterdir()
-                          if f.suffix in ('.mp4', '.mkv', '.webm') and f.stem != 'thumbnail']
-            if candidates:
-                video_path = candidates[0]
-        if video_path is None:
-            video_path, _, _ = download_video(url, s_dir)
-
-        transcript_file = s_dir / "transcript.json"
-        if transcript_file.exists():
-            transcript = json.loads(transcript_file.read_text())
+        if local_path:
+            # Local file: use it in place (no download), no YouTube transcript.
+            from pathlib import Path
+            video_path = Path(local_path)
+            transcript = []
         else:
-            transcript = fetch_transcript_safe(video_id, s_dir)
+            # Reuse a previously downloaded video if present, else download.
+            video_path = None
+            if s_dir.exists():
+                candidates = [f for f in s_dir.iterdir()
+                              if f.suffix in ('.mp4', '.mkv', '.webm') and f.stem != 'thumbnail']
+                if candidates:
+                    video_path = candidates[0]
+            if video_path is None:
+                video_path, _, _ = download_video(url, s_dir)
+
+            transcript_file = s_dir / "transcript.json"
+            if transcript_file.exists():
+                transcript = json.loads(transcript_file.read_text())
+            else:
+                transcript = fetch_transcript_safe(video_id, s_dir)
 
         video_duration = (
             transcript[-1]["start"] + transcript[-1].get("duration", 0) if transcript else 0.0
@@ -308,13 +327,19 @@ def analyze_video(url: str, focus: str = "", time_range: str = "") -> str:
     what happens" questions. Use extract_frames only when you need the frame
     images saved on disk for the agent to view.
 
+    `url` may be a YouTube URL or a local video file path (or file:// URI).
+
     Optional:
     - focus: pay special attention to a subject (e.g. "the demo", "pricing").
     - time_range: restrict to a portion, "START-END" in seconds or MM:SS.
 
     Returns: session_id; read the full analysis with get_video_analysis.
     """
-    video_id = _extract_video_id(url)
+    try:
+        video_id = source_video_id(url)
+    except ValueError as e:
+        return json.dumps({"status": "error", "message": str(e)})
+    local_path = resolve_local_path(url)
     has_custom = bool(focus or time_range)
 
     if load_analysis(video_id) is not None and not has_custom:
@@ -343,10 +368,13 @@ def analyze_video(url: str, focus: str = "", time_range: str = "") -> str:
         if not session_exists(video_id):
             s_dir = session_dir(video_id)
             s_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                transcript = fetch_transcript(video_id, s_dir)
-            except Exception:
+            if local_path:
                 transcript = []
+            else:
+                try:
+                    transcript = fetch_transcript(video_id, s_dir)
+                except Exception:
+                    transcript = []
             duration = 0.0
             if transcript:
                 last = transcript[-1]
@@ -465,6 +493,8 @@ def extract_structured(url: str, schema: str, focus: str = "", time_range: str =
     """
     Extract typed JSON from a video against a schema you provide. Gemini watches
     the whole video and returns JSON validated against the schema.
+
+    `url` may be a YouTube URL or a local video file path (or file:// URI).
 
     schema: a preset name, a path to a .json schema file, or an inline JSON Schema
     string. Built-in presets: cli_commands, final_config, step_sequence,

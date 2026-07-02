@@ -67,6 +67,15 @@ uvx screenscribe extract-structured "https://youtu.be/dQw4w9WgXcQ" --schema cli_
 claude mcp add screenscribe -- uvx screenscribe-mcp
 ```
 
+**Local video files** — anywhere a YouTube URL is accepted (the `analyze`, `extract`, `slides`, and `extract-structured` commands, and the `analyze_video` / `extract_frames` / `extract_structured` MCP tools), you can pass a local video instead — a path or a `file://` URI. Gemini uploads the file and watches it the same way.
+
+```bash
+screenscribe analyze /path/to/clip.mp4
+screenscribe extract-structured ./cooking.mov --schema recipe
+```
+
+Local files have no transcript (so `--transcript-only` is YouTube-only), and are subject to the Gemini Files API limits (~2 GB/file). A session id is synthesized from the filename.
+
 <details>
 <summary><b>Run from source (development)</b></summary>
 

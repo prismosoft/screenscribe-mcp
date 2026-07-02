@@ -187,6 +187,19 @@ def test_extract_structured_requires_gemini(monkeypatch, tmp_path):
     assert out["status"] == "error"
 
 
+def test_extract_structured_local_file(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(gs, "_call_gemini", lambda *a, **k: '{"n": 7}')
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    out = se.extract_structured(str(clip), _OBJ_SCHEMA)
+    assert out["status"] == "success"
+    assert out["data"] == {"n": 7}
+    assert out["session_id"].startswith("local-")
+    # Cache is keyed on the synthesized local id — a re-run is free.
+    assert se.extract_structured(str(clip), _OBJ_SCHEMA)["cached"] is True
+
+
 # ── batch fan-out (extract over resolved videos) ─────────────────────────────
 
 import screenscribe.resolver as _rv
