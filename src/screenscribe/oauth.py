@@ -82,10 +82,10 @@ def _parse_form_bytes(body: bytes) -> dict[str, str]:
 
 
 def _normalize_scope(raw: str | None) -> str:
-    parts = [p for p in (raw or SCOPE).split() if p]
-    if parts != [SCOPE]:
-        raise ValueError(f"Supported scope: {SCOPE}")
-    return SCOPE
+    parts = list(dict.fromkeys(p for p in (raw or SCOPE).split() if p))
+    if SCOPE not in parts or any(part not in SUPPORTED_SCOPES for part in parts):
+        raise ValueError(f"Supported scopes: {SCOPE} {OFFLINE_SCOPE}")
+    return " ".join(parts)
 
 
 def _pkce_ok(verifier: str, expected: str) -> bool:
@@ -234,7 +234,7 @@ class Store:
     def validate_access(self, token: str, resource: str) -> bool:
         with self.connect() as db:
             row = db.execute("SELECT scope,resource,expires_at,revoked_at FROM oauth_tokens WHERE access_token_hash=?", (_hash(token),)).fetchone()
-            return bool(row and not row["revoked_at"] and row["expires_at"] > _now() and row["resource"] == resource and row["scope"] == SCOPE)
+            return bool(row and not row["revoked_at"] and row["expires_at"] > _now() and row["resource"] == resource and SCOPE in row["scope"].split())
 
     def revoke(self, token: str) -> None:
         hashed = _hash(token)
@@ -354,6 +354,7 @@ class OAuth:
                 "token_endpoint": self.issuer + "/oauth/token",
                 "registration_endpoint": self.issuer + "/oauth/register",
                 "revocation_endpoint": self.issuer + "/oauth/revoke",
+                "authorization_response_iss_parameter_supported": True,
                 "response_types_supported": ["code"],
                 "response_modes_supported": ["query"],
                 "grant_types_supported": ["authorization_code", "refresh_token"],
