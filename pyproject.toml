@@ -4,48 +4,21 @@ build-backend = "hatchling.build"
 
 [project]
 name = "screenscribe-mcp"
-version = "0.4.0"
-description = "Extract typed, schema-validated data from videos and synthesize across many — a Gemini-powered CLI and MCP server for agents."
+version = "1.0.0"
+description = "Remote OAuth-protected Streamable HTTP MCP for Gemini video analysis."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
-license-files = ["LICENSE"]
-authors = [{ name = "ashmitb95" }]
-keywords = [
-    "youtube", "video", "transcript", "mcp", "model-context-protocol",
-    "gemini", "structured-extraction", "json-schema", "cross-video-synthesis",
-    "ai", "agents",
-]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Environment :: Console",
-    "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3",
-    "Topic :: Multimedia :: Video",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-]
+authors = [{ name = "ashmitb95" }, { name = "prismosoft" }]
 dependencies = [
-    "yt-dlp",
-    "youtube-transcript-api",
-    "Pillow",
-    "mcp[cli]",
-    "python-dotenv",
-    "google-genai",
-    "static-ffmpeg",
-    "jsonschema",
+  "google-genai>=1.40.0",
+  "mcp[cli]>=1.25.0",
+  "uvicorn>=0.35.0",
+  "starlette>=0.47.0",
 ]
-
-[project.urls]
-Homepage = "https://github.com/ashmitb95/screenscribe-mcp"
-Repository = "https://github.com/ashmitb95/screenscribe-mcp"
-Issues = "https://github.com/ashmitb95/screenscribe-mcp/issues"
 
 [project.scripts]
-screenscribe = "screenscribe.main:main"
-screenscribe-mcp = "screenscribe.server:run"
+screenscribe-mcp = "screenscribe.app:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/screenscribe"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
