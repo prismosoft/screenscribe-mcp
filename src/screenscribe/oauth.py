@@ -27,6 +27,8 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Re
 from starlette.routing import Route
 
 SCOPE = "mcp"
+OFFLINE_SCOPE = "offline_access"
+SUPPORTED_SCOPES = {SCOPE, OFFLINE_SCOPE}
 COOKIE_NAME = "video_analyzer_oauth_session"
 
 
@@ -360,7 +362,7 @@ class OAuth:
                 "grant_types_supported": ["authorization_code", "refresh_token"],
                 "token_endpoint_auth_methods_supported": ["none"],
                 "code_challenge_methods_supported": ["S256"],
-                "scopes_supported": [SCOPE],
+                "scopes_supported": [SCOPE, OFFLINE_SCOPE],
             }, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=300"})
 
         async def register(request: Request) -> Response:
