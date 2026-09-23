@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 
 import uvicorn
@@ -10,8 +11,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
-
-from mcp.server.transport_security import TransportSecuritySettings
 
 from screenscribe.oauth import OAuth
 from screenscribe.server import DEFAULT_MODEL, mcp
