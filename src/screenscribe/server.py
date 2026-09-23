@@ -22,7 +22,7 @@ DEFAULT_MEDIA_RESOLUTION = "low"
 _ALLOWED_THINKING = {"low", "medium", "high"}
 _ALLOWED_MEDIA_RESOLUTION = {"low", "medium", "high"}
 
-mcp = FastMCP("video-analyzer")
+mcp = FastMCP("video-analyzer", host="0.0.0.0", stateless_http=True, json_response=True)
 
 _ANALYSIS_SCHEMA: dict[str, Any] = {
     "type": "object",
