@@ -49,15 +49,15 @@ async def health(_request: Request) -> Response:
     })
 
 
-mcp_app = mcp.streamable_http_app(
-    host="0.0.0.0",
-    stateless_http=True,
-    json_response=True,
-    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
-)
+mcp_app = mcp.streamable_http_app()
+
+@contextlib.asynccontextmanager
+async def lifespan(_app: Starlette):
+    async with mcp.session_manager.run():
+        yield
 
 routes = [Route("/health", health, methods=["GET"]), *oauth.routes(), Mount("/", app=mcp_app)]
-app = Starlette(routes=routes)
+app = Starlette(routes=routes, lifespan=lifespan)
 app.add_middleware(McpOAuthMiddleware)
 
 
