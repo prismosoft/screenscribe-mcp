@@ -19,6 +19,22 @@ Gemini watches the video (visual frames + audio/narration) and returns structure
 
 `focus` is optional. `time_range` accepts `START-END` using seconds, `MM:SS`, or `H:MM:SS`.
 
+### Custom extraction
+
+All optional, per call:
+
+| Argument | What it does |
+|---|---|
+| `prompt` | Replaces the built-in instructions (`focus` is still appended). |
+| `output_schema` | A JSON Schema (object or JSON string) Gemini fills instead of the built-in one. The reply is validated, retried once, then returned as `status: "invalid"` with `schema_errors` if it still doesn't match. |
+| `model` | Any Gemini model for this call, e.g. a Pro model. `GEMINI_ALLOWED_MODELS` can limit the choices. |
+| `thinking_level` | `low`, `medium` or `high` for this call. |
+| `media_resolution` | `low`, `medium` or `high` for this call. |
+| `fps` | Frames sampled per second (default about 1, max 24). Raise it for fast cuts; cost grows with it. |
+| `max_output_tokens` | Output cap for long replies. A reply cut at the cap returns `status: "truncated"`. |
+
+Every reply carries `usage` (input, output and thinking tokens) so the caller can see the cost.
+
 ## Gemini configuration
 
 All model configuration is controlled from environment variables, so changing models does not require a code deploy:
@@ -28,6 +44,7 @@ All model configuration is controlled from environment variables, so changing mo
 | `GEMINI_MODEL` | `gemini-3.8-flash` |
 | `GEMINI_THINKING_LEVEL` | `medium` (`low`, `medium`, `high`) |
 | `GEMINI_MEDIA_RESOLUTION` | `low` (`low`, `medium`, `high`) |
+| `GEMINI_ALLOWED_MODELS` | empty (any `gemini-*` model may be picked per call); comma list to limit |
 | `GEMINI_API_KEY` | required |
 
 ## Remote MCP + OAuth
